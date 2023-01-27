@@ -18,12 +18,18 @@ cc_library(
 )
 
 cc_library(
+    name = "pylinetable",
+    hdrs = ["pylinetable.h"],
+)
+
+cc_library(
     name = "python_util",
     srcs = ["python_util.cc"],
     hdrs = ["python_util.h"],
     deps = [
         ":common",
         ":nullable",
+	":pylinetable",
     ],
 )
 
