@@ -6,8 +6,9 @@
 #include <benchmark/benchmark.h>
 #include <gtest/gtest.h>
 
+#include "native_test_util.h"
+
 #include "src/googleclouddebugger/common.h"
-#include "src/googleclouddebugger/native_test_util.h"
 #include "src/googleclouddebugger/python_callback.h"
 #include "src/googleclouddebugger/python_util.h"
 
