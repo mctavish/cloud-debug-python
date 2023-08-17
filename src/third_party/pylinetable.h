@@ -22,19 +22,6 @@
 // Things are different in 3.11 than 3.10.
 // See https://github.com/python/cpython/blob/main/Objects/locations.md
 
-typedef enum _PyCodeLocationInfoKind {
-    /* short forms are 0 to 9 */
-    PY_CODE_LOCATION_INFO_SHORT0 = 0,
-    /* one lineforms are 10 to 12 */
-    PY_CODE_LOCATION_INFO_ONE_LINE0 = 10,
-    PY_CODE_LOCATION_INFO_ONE_LINE1 = 11,
-    PY_CODE_LOCATION_INFO_ONE_LINE2 = 12,
-
-    PY_CODE_LOCATION_INFO_NO_COLUMNS = 13,
-    PY_CODE_LOCATION_INFO_LONG = 14,
-    PY_CODE_LOCATION_INFO_NONE = 15
-} _PyCodeLocationInfoKind;
-
 /** Out of process API for initializing the location table. */
 extern void _PyLineTable_InitAddressRange(
     const char *linetable,
@@ -46,8 +33,10 @@ extern void _PyLineTable_InitAddressRange(
 extern int _PyLineTable_NextAddressRange(PyCodeAddressRange *range);
 
 
-void _PyLineTable_InitAddressRange(const char *linetable, Py_ssize_t length, int firstlineno, PyCodeAddressRange *range) {
-    range->opaque.lo_next = linetable;
+void
+_PyLineTable_InitAddressRange(const char *linetable, Py_ssize_t length, int firstlineno, PyCodeAddressRange *range)
+{
+    range->opaque.lo_next = (const uint8_t *)linetable;
     range->opaque.limit = range->opaque.lo_next + length;
     range->ar_start = -1;
     range->ar_end = 0;
@@ -127,7 +116,7 @@ static void
 advance(PyCodeAddressRange *bounds)
 {
     ASSERT_VALID_BOUNDS(bounds);
-    bounds->opaque.computed_line += get_line_delta(reinterpret_cast<const uint8_t *>(bounds->opaque.lo_next));
+    bounds->opaque.computed_line += get_line_delta(bounds->opaque.lo_next);
     if (is_no_line_marker(*bounds->opaque.lo_next)) {
         bounds->ar_line = -1;
     }

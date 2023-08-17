@@ -229,8 +229,13 @@ BytecodeBreakpoint::PreparePatchCodeObject(
     return nullptr;
   }
 
+#if PY_VERSION_HEX < 0x030B0000
   data->original_code =
       ScopedPyObject::NewReference(code_object.get()->co_code);
+#else
+  data->original_code =
+      ScopedPyObject::NewReference(code_object.get()->_co_code);
+#endif
   if ((data->original_code == nullptr) ||
       !PyBytes_CheckExact(data->original_code.get())) {
     LOG(ERROR) << "Code object has no code";
@@ -261,12 +266,21 @@ void BytecodeBreakpoint::PatchCodeObject(CodeObjectBreakpoints* code) {
 
     code_object->co_stacksize = code->original_stacksize;
 
+#if PY_VERSION_HEX < 0x030B0000
     code->zombie_refs.push_back(ScopedPyObject(code_object->co_code));
     code_object->co_code = code->original_code.get();
     VLOG(1) << "Code object " << CodeObjectDebugString(code_object)
             << " reverted to " << code_object->co_code
             << " from patched " << code->zombie_refs.back().get();
     Py_INCREF(code_object->co_code);
+#else
+    code->zombie_refs.push_back(ScopedPyObject(code_object->_co_code));
+    code_object->_co_code = code->original_code.get();
+    VLOG(1) << "Code object " << CodeObjectDebugString(code_object)
+            << " reverted to " << code_object->_co_code
+            << " from patched " << code->zombie_refs.back().get();
+    Py_INCREF(code_object->_co_code);
+#endif
 
     // Restore the original line data to the code object.
 #if PY_VERSION_HEX < 0x030A0000
@@ -358,6 +372,7 @@ void BytecodeBreakpoint::PatchCodeObject(CodeObjectBreakpoints* code) {
 
   code_object->co_stacksize = code->original_stacksize + 1;
 
+#if PY_VERSION_HEX < 0x030B0000
   code->zombie_refs.push_back(ScopedPyObject(code_object->co_code));
   ScopedPyObject bytecode_string(PyBytes_FromStringAndSize(
       reinterpret_cast<const char*>(bytecode_manipulator.bytecode().data()),
@@ -367,6 +382,17 @@ void BytecodeBreakpoint::PatchCodeObject(CodeObjectBreakpoints* code) {
   VLOG(1) << "Code object " << CodeObjectDebugString(code_object)
           << " reassigned to " << code_object->co_code
           << ", original was " << code->original_code.get();
+#else
+  code->zombie_refs.push_back(ScopedPyObject(code_object->_co_code));
+  ScopedPyObject bytecode_string(PyBytes_FromStringAndSize(
+      reinterpret_cast<const char*>(bytecode_manipulator.bytecode().data()),
+      bytecode_manipulator.bytecode().size()));
+  DCHECK(!bytecode_string.is_null());
+  code_object->_co_code = bytecode_string.release();
+  VLOG(1) << "Code object " << CodeObjectDebugString(code_object)
+          << " reassigned to " << code_object->_co_code
+          << ", original was " << code->original_code.get();
+#endif
 
   // Update the line data in the code object.
 #if PY_VERSION_HEX < 0x030A0000

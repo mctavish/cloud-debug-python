@@ -106,7 +106,9 @@ static int GetInstructionsSize(
 static PythonOpcodeType GetOpcodeType(uint8_t opcode) {
   switch (opcode) {
     case YIELD_VALUE:
+#if PY_VERSION_HEX < 0x030B0000
     case YIELD_FROM:
+#endif
       return YIELD_OPCODE;
 
     case FOR_ITER:
@@ -116,8 +118,10 @@ static PythonOpcodeType GetOpcodeType(uint8_t opcode) {
     case SETUP_LOOP:
     case SETUP_EXCEPT:
 #endif
+#if PY_VERSION_HEX < 0x030B0000
     case SETUP_FINALLY:
     case SETUP_WITH:
+#endif
 #if PY_VERSION_HEX >= 0x03080000 && PY_VERSION_HEX < 0x03090000
     // Added in Python 3.8 and removed in 3.9
     case CALL_FINALLY:
@@ -126,14 +130,16 @@ static PythonOpcodeType GetOpcodeType(uint8_t opcode) {
 
     case JUMP_IF_FALSE_OR_POP:
     case JUMP_IF_TRUE_OR_POP:
+#if PY_VERSION_HEX < 0x030B0000
     case JUMP_ABSOLUTE:
     case POP_JUMP_IF_FALSE:
     case POP_JUMP_IF_TRUE:
+#endif
 #if PY_VERSION_HEX < 0x03080000
     // Removed in Python 3.8.
     case CONTINUE_LOOP:
 #endif
-#if PY_VERSION_HEX >= 0x03090000
+#if PY_VERSION_HEX >= 0x03090000 && PY_VERSION_HEX < 0x030B0000
     case JUMP_IF_NOT_EXC_MATCH:
 #endif
       return BRANCH_ABSOLUTE_OPCODE;
@@ -232,7 +238,11 @@ static void WriteInstructions(
 static std::vector<PythonInstruction> BuildMethodCall(int const_index) {
   std::vector<PythonInstruction> instructions;
   instructions.push_back(PythonInstructionArg(LOAD_CONST, const_index));
+#if PY_VERSION_HEX < 0x030B0000
   instructions.push_back(PythonInstructionArg(CALL_FUNCTION, 0));
+#else
+  instructions.push_back(PythonInstructionArg(CALL, 0));
+#endif
   instructions.push_back(PythonInstructionNoArg(POP_TOP));
 
   return instructions;
@@ -576,8 +586,13 @@ bool BytecodeManipulator::AppendMethodCall(
     BytecodeManipulator::Data* data,
     int offset,
     int const_index) const {
+#if PY_VERSION_HEX < 0x030B0000
   PythonInstruction trampoline =
       PythonInstructionArg(JUMP_ABSOLUTE, data->bytecode.size());
+#else
+  PythonInstruction trampoline =
+      PythonInstructionArg(JUMP_FORWARD, data->bytecode.size() - offset);
+#endif
 
   std::vector<PythonInstruction> relocated_instructions;
   int relocated_size = 0;
@@ -666,9 +681,16 @@ bool BytecodeManipulator::AppendMethodCall(
       appendix.end(),
       relocated_instructions.begin(),
       relocated_instructions.end());
+#if PY_VERSION_HEX < 0x030B0000
   appendix.push_back(PythonInstructionArg(
       JUMP_ABSOLUTE,
       offset + relocated_size));
+#else
+  int current_pos = data->bytecode.size() + GetInstructionsSize(appendix) + PythonInstructionArg(JUMP_BACKWARD, 0).size;
+  appendix.push_back(PythonInstructionArg(
+      JUMP_BACKWARD,
+      current_pos - (offset + relocated_size)));
+#endif
 
   // Write the appendix instructions.
   int pos = data->bytecode.size();

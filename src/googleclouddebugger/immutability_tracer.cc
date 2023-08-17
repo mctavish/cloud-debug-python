@@ -166,7 +166,11 @@ int ImmutabilityTracer::OnTraceCallbackInternal(
     PyObject* arg) {
   switch (what) {
     case PyTrace_CALL:
+#if PY_VERSION_HEX < 0x030B0000
       VerifyCodeObject(ScopedPyCodeObject::NewReference(frame->f_code));
+#else
+      VerifyCodeObject(ScopedPyCodeObject::NewReference(PyFrame_GetCode(frame)));
+#endif
       break;
 
     case PyTrace_EXCEPTION:
@@ -174,7 +178,11 @@ int ImmutabilityTracer::OnTraceCallbackInternal(
 
     case PyTrace_LINE:
       ++line_count_;
+#if PY_VERSION_HEX < 0x030B0000
       ProcessCodeLine(frame->f_code, frame->f_lineno);
+#else
+      ProcessCodeLine(PyFrame_GetCode(frame), PyFrame_GetLineNumber(frame));
+#endif
       break;
 
     case PyTrace_RETURN:
@@ -251,9 +259,15 @@ void ImmutabilityTracer::VerifyCodeObject(ScopedPyCodeObject code_object) {
 void ImmutabilityTracer::ProcessCodeLine(
     PyCodeObject* code_object,
     int line_number) {
+#if PY_VERSION_HEX < 0x030B0000
   int size = PyBytes_Size(code_object->co_code);
   const uint8_t* opcodes =
       reinterpret_cast<uint8_t*>(PyBytes_AsString(code_object->co_code));
+#else
+  int size = PyBytes_Size(code_object->_co_code);
+  const uint8_t* opcodes =
+      reinterpret_cast<uint8_t*>(PyBytes_AsString(code_object->_co_code));
+#endif
 
   DCHECK(opcodes != nullptr);
 
@@ -299,19 +313,21 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
   //   effects.
   switch (opcode) {
     case POP_TOP:
-    case ROT_TWO:
-    case ROT_THREE:
-    case DUP_TOP:
     case NOP:
     case UNARY_POSITIVE:
     case UNARY_NEGATIVE:
     case UNARY_INVERT:
+    case BINARY_SUBSCR:
+    case GET_ITER:
+#if PY_VERSION_HEX < 0x030B0000
+    case ROT_TWO:
+    case ROT_THREE:
+    case DUP_TOP:
     case BINARY_POWER:
     case BINARY_MULTIPLY:
     case BINARY_MODULO:
     case BINARY_ADD:
     case BINARY_SUBTRACT:
-    case BINARY_SUBSCR:
     case BINARY_FLOOR_DIVIDE:
     case BINARY_TRUE_DIVIDE:
     case INPLACE_FLOOR_DIVIDE:
@@ -325,15 +341,15 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case BINARY_AND:
     case BINARY_XOR:
     case INPLACE_POWER:
-    case GET_ITER:
     case INPLACE_LSHIFT:
     case INPLACE_RSHIFT:
     case INPLACE_AND:
     case INPLACE_XOR:
     case INPLACE_OR:
+    case POP_BLOCK:
+#endif
     case RETURN_VALUE:
     case YIELD_VALUE:
-    case POP_BLOCK:
     case UNPACK_SEQUENCE:
     case FOR_ITER:
     case LOAD_CONST:
@@ -347,17 +363,21 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case JUMP_FORWARD:
     case JUMP_IF_FALSE_OR_POP:
     case JUMP_IF_TRUE_OR_POP:
+#if PY_VERSION_HEX < 0x030B0000
     case POP_JUMP_IF_TRUE:
     case POP_JUMP_IF_FALSE:
+#endif
     case LOAD_GLOBAL:
     case LOAD_FAST:
     case STORE_FAST:
     case DELETE_FAST:
+#if PY_VERSION_HEX < 0x030B0000
     case CALL_FUNCTION:
+    case CALL_FUNCTION_KW:
+#endif
     case MAKE_FUNCTION:
     case BUILD_SLICE:
     case LOAD_DEREF:
-    case CALL_FUNCTION_KW:
     case EXTENDED_ARG:
 #if PY_VERSION_HEX < 0x03080000
     // These were all removed in Python 3.8.
@@ -365,11 +385,13 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case CONTINUE_LOOP:
     case SETUP_LOOP:
 #endif
+#if PY_VERSION_HEX < 0x030B0000
     case DUP_TOP_TWO:
     case BINARY_MATRIX_MULTIPLY:
     case INPLACE_MATRIX_MULTIPLY:
-    case GET_YIELD_FROM_ITER:
     case YIELD_FROM:
+#endif
+    case GET_YIELD_FROM_ITER:
     case UNPACK_EX:
     case CALL_FUNCTION_EX:
     case LOAD_CLASSDEREF:
@@ -387,6 +409,8 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case LIST_TO_TUPLE:
     case IS_OP:
     case CONTAINS_OP:
+#endif
+#if PY_VERSION_HEX > 0x03090000 && PY_VERSION_HEX < 0x030B0000
     case JUMP_IF_NOT_EXC_MATCH:
 #endif
     case FORMAT_VALUE:
@@ -395,20 +419,24 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
 #if PY_VERSION_HEX >= 0x03070000
     // Added in Python 3.7.
     case LOAD_METHOD:
+#endif
+#if PY_VERSION_HEX >= 0x03070000 && PY_VERSION_HEX < 0x030B0000
     case CALL_METHOD:
 #endif
-#if PY_VERSION_HEX >= 0x03080000
+#if PY_VERSION_HEX >= 0x03080000 && PY_VERSION_HEX < 0x030B0000
     // Added back in Python 3.8 (was in 2.7 as well)
     case ROT_FOUR:
 #endif
 #if PY_VERSION_HEX >= 0x030A0000
     // Added in Python 3.10
-    case COPY_DICT_WITHOUT_KEYS:
     case GET_LEN:
     case MATCH_MAPPING:
     case MATCH_SEQUENCE:
     case MATCH_KEYS:
     case MATCH_CLASS:
+#endif
+#if PY_VERSION_HEX >= 0x030A0000 && PY_VERSION_HEX < 0x030B0000
+    case COPY_DICT_WITHOUT_KEYS:
     case ROT_N:
 #endif
       return OPCODE_NOT_MUTABLE;
@@ -419,7 +447,9 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case IMPORT_STAR:
     case IMPORT_NAME:
     case IMPORT_FROM:
+#if PY_VERSION_HEX < 0x030B0000
     case SETUP_FINALLY:
+#endif
     // TODO: allow changing fields of locally created objects/lists.
     case STORE_SUBSCR:
     case DELETE_SUBSCR:
@@ -433,7 +463,9 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case STORE_DEREF:
     // TODO: allow exception handling
     case RAISE_VARARGS:
+#if PY_VERSION_HEX < 0x030B0000
     case SETUP_WITH:
+#endif
     // TODO: allow closures
     case LOAD_CLOSURE:
 #if PY_VERSION_HEX < 0x03080000
@@ -458,7 +490,9 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case STORE_ANNOTATION:
 #endif
     case DELETE_DEREF:
+#if PY_VERSION_HEX < 0x030B0000
     case SETUP_ASYNC_WITH:
+#endif
 #if PY_VERSION_HEX >= 0x03080000
     // Added in Python 3.8.
     case END_ASYNC_FOR:
@@ -479,7 +513,7 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case WITH_EXCEPT_START:
     case LOAD_ASSERTION_ERROR:
 #endif
-#if PY_VERSION_HEX >= 0x030A0000
+#if PY_VERSION_HEX >= 0x030A0000 && PY_VERSION_HEX < 0x030B0000
     // Added in Python 3.10
     case GEN_START:
 #endif
@@ -506,6 +540,7 @@ void ImmutabilityTracer::ProcessCodeRange(const uint8_t* code_start,
         break;
 
       case OPCODE_MAYBE_MUTABLE:
+#if PY_VERSION_HEX < 0x030B0000
         if (opcode == JUMP_ABSOLUTE) {
           // Check for a jump to itself, which happens in "while True: pass".
           // The tracer won't call our tracing function unless there is a jump
@@ -522,6 +557,7 @@ void ImmutabilityTracer::ProcessCodeRange(const uint8_t* code_start,
           DCHECK_LE(opcodes, end);
           break;
         }
+#endif
         LOG(WARNING) << "Unknown opcode " << static_cast<uint32_t>(opcode);
         mutable_code_detected_ = true;
         return;

@@ -139,12 +139,19 @@ static PyObject* LogCommon(LogSeverity severity, PyObject* py_args) {
   const char* file_name = "<unknown>";
   int line = -1;
 
+#if PY_VERSION_HEX < 0x030B0000
   PyFrameObject* frame = PyThreadState_Get()->frame;
   if (frame != nullptr) {
     file_name = PyString_AsString(frame->f_code->co_filename);
     line = PyFrame_GetLineNumber(frame);
   }
-
+#else
+  PyFrameObject* frame = PyEval_GetFrame();
+  if (frame != nullptr) {
+    file_name = PyString_AsString(PyFrame_GetCode(frame)->co_filename);
+    line = PyFrame_GetLineNumber(frame);
+  }
+#endif
   // We only log file name, not the full path.
   if (file_name != nullptr) {
     const char* directory_end = strrchr(file_name, '/');
@@ -328,11 +335,10 @@ static PyObject* CallImmutable(PyObject* self, PyObject* py_args) {
   PyFrame_FastToLocals(frame);
 
   ScopedImmutabilityTracer immutability_tracer;
-#if PY_MAJOR_VERSION >= 3
+#if PY_VERSION_HEX < 0x030B0000
   return PyEval_EvalCode(obj_code, frame->f_globals, frame->f_locals);
 #else
-  return PyEval_EvalCode(reinterpret_cast<PyCodeObject*>(obj_code),
-                         frame->f_globals, frame->f_locals);
+  return PyEval_EvalCode(obj_code, PyFrame_GetGlobals(frame), PyFrame_GetLocals(frame));
 #endif
 }
 

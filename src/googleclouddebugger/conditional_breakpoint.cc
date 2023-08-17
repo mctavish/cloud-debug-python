@@ -42,7 +42,11 @@ ConditionalBreakpoint::~ConditionalBreakpoint() {
 
 
 void ConditionalBreakpoint::OnBreakpointHit() {
+#if PY_VERSION_HEX < 0x030B0000
   PyFrameObject* frame = PyThreadState_Get()->frame;
+#else
+  PyFrameObject* frame = PyEval_GetFrame();
+#endif
 
   if (!EvaluateCondition(frame)) {
     return;
@@ -70,14 +74,17 @@ bool ConditionalBreakpoint::EvaluateCondition(PyFrameObject* frame) {
 
   {
     ScopedImmutabilityTracer immutability_tracer;
+#if PY_VERSION_HEX < 0x030B0000
     result.reset(PyEval_EvalCode(
-#if PY_MAJOR_VERSION >= 3
         reinterpret_cast<PyObject*>(condition_.get()),
-#else
-        condition_.get(),
-#endif
         frame->f_globals,
         frame->f_locals));
+#else
+    result.reset(PyEval_EvalCode(
+        reinterpret_cast<PyObject*>(condition_.get()),
+        PyFrame_GetGlobals(frame),
+        PyFrame_GetLocals(frame)));
+#endif
     is_mutable_code_detected = immutability_tracer.IsMutableCodeDetected();
     line_count = immutability_tracer.GetLineCount();
   }
