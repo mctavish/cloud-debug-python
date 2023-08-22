@@ -126,11 +126,16 @@ static PythonOpcodeType GetOpcodeType(uint8_t opcode) {
     // Added in Python 3.8 and removed in 3.9
     case CALL_FINALLY:
 #endif
-      return BRANCH_DELTA_OPCODE;
-
+#if PY_VERSION_HEX >= 0x030B0000
+    // Changed to relative offset in 3.11
     case JUMP_IF_FALSE_OR_POP:
     case JUMP_IF_TRUE_OR_POP:
+#endif
+      return BRANCH_DELTA_OPCODE;
+
 #if PY_VERSION_HEX < 0x030B0000
+    case JUMP_IF_FALSE_OR_POP:
+    case JUMP_IF_TRUE_OR_POP:
     case JUMP_ABSOLUTE:
     case POP_JUMP_IF_FALSE:
     case POP_JUMP_IF_TRUE:

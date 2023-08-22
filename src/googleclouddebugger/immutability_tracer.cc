@@ -439,6 +439,35 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
     case COPY_DICT_WITHOUT_KEYS:
     case ROT_N:
 #endif
+#if PY_VERSION_HEX >= 0x030B0000
+    case COPY:
+    case CACHE:
+    case BINARY_OP:
+    case PUSH_EXC_INFO:
+    case CHECK_EXC_MATCH:
+    case CHECK_EG_MATCH:
+    case PREP_RERAISE_STAR:
+    case BEFORE_WITH:
+    case JUMP_BACKWARD:
+    case JUMP_BACKWARD_NO_INTERRUPT:
+    case POP_JUMP_FORWARD_IF_TRUE:
+    case POP_JUMP_BACKWARD_IF_TRUE:
+    case POP_JUMP_FORWARD_IF_FALSE:
+    case POP_JUMP_BACKWARD_IF_FALSE:
+    case POP_JUMP_FORWARD_IF_NOT_NONE:
+    case POP_JUMP_BACKWARD_IF_NOT_NONE:
+    case POP_JUMP_FORWARD_IF_NONE:
+    case POP_JUMP_BACKWARD_IF_NONE:
+    case COPY_FREE_VARS:
+    case CALL:
+    case PRECALL:
+    case PUSH_NULL:
+    case KW_NAMES:
+    case RETURN_GENERATOR:
+    case SEND:
+    case ASYNC_GEN_WRAP:
+    // Note: Check on JUMP_IF_TRUE_OR_POP; they're relative instead of absolute.
+#endif
       return OPCODE_NOT_MUTABLE;
 
     case PRINT_EXPR:
@@ -516,6 +545,11 @@ static OpcodeMutableStatus IsOpcodeMutable(const uint8_t opcode) {
 #if PY_VERSION_HEX >= 0x030A0000 && PY_VERSION_HEX < 0x030B0000
     // Added in Python 3.10
     case GEN_START:
+#endif
+#if PY_VERSION_HEX >= 0x030B0000
+    case SWAP:
+    case MAKE_CELL:
+    case RESUME:
 #endif
       return OPCODE_MUTABLE;
 
